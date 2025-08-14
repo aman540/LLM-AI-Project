@@ -1,9 +1,9 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from services.upsert_from_csv import upsert_from_csv_file
 from services.vector_engine import get_similar_terms
-from services.fetch_data import get_all_vectors
+from services.fetch_data import delete_vector_by_id, get_all_vectors, get_vector_by_id
 import shutil
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -25,7 +25,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080"],  # or ["*"] for all origins
+    allow_origins=["*"],  # or ["*"] for all origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -96,10 +96,24 @@ async def upload_csv(file: UploadFile = File(...)):
         os.remove(temp_file_path)
 
 @app.get("/api/fetch-term")
-async def fetch_Term_data():
-    print("API Started!")
-    return {"results": get_all_vectors()}
-
+async def fetch_term_data():
+    try:
+        results = get_all_vectors()
+        return {"results": results}
+    except Exception as e:
+        # Log the error for debugging
+        print(f"Error fetching term data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    
+@app.get("/api/fetch-term/{vector_id}")
+async def fetch_term_data(vector_id: str):
+    try:
+        results = get_vector_by_id(vector_id=vector_id, namespace="default")
+        return {"results": results}
+    except Exception as e:
+        print(f"Endpoint error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    
 @app.get("/api/term-relation")
 async def fetch_Term_relation():
     result = [];
@@ -179,3 +193,16 @@ async def search(query: str, top_k: int = 3):
             "reason": reason
         })
     return {"results": results}
+
+
+@app.delete("/api/delete-term/{vector_id}")
+async def delete_term(vector_id: str):
+    try:
+        result = delete_vector_by_id(vector_id=vector_id, namespace="default")
+        return JSONResponse(content=result)
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error deleting term: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    
